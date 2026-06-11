@@ -14,6 +14,12 @@ import {
   CopilotSuggestionSchema,
   CopilotSuggestResponseSchema,
   CopilotSuggestionKindSchema,
+  CopilotStreamStartedEventSchema,
+  CopilotStreamChunkEventSchema,
+  CopilotStreamSuggestionEventSchema,
+  CopilotStreamDoneEventSchema,
+  CopilotStreamErrorEventSchema,
+  CopilotStreamEventSchema,
 } from "./index.js";
 import type { AclCascade } from "../runtime/index.js";
 
@@ -545,6 +551,276 @@ describe("CopilotSuggestResponseSchema", () => {
         acl_decision: { allowed: true, reason: "ok", blocking_level: null },
         llm_latency_ms: -1,
       }),
+    ).toThrow();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  CopilotStream events (Sprint G.8 — SSE)                            */
+/* ------------------------------------------------------------------ */
+
+describe("CopilotStreamStartedEventSchema", () => {
+  it("parse started event ok", () => {
+    const ev = CopilotStreamStartedEventSchema.parse({
+      type: "started",
+      trace_id: "trace-g8-1",
+      tenant: "client-acme",
+      llm_backend: "ollama",
+      llm_model: "phi3:mini",
+      started_at: "2026-06-12T10:00:00Z",
+    });
+    expect(ev.type).toBe("started");
+    expect(ev.llm_backend).toBe("ollama");
+  });
+
+  it("accepte llm_backend null (killswitch idle)", () => {
+    const ev = CopilotStreamStartedEventSchema.parse({
+      type: "started",
+      trace_id: "trace-g8-idle",
+      tenant: "client-acme",
+      llm_backend: null,
+      llm_model: null,
+      started_at: "2026-06-12T10:00:00Z",
+    });
+    expect(ev.llm_backend).toBeNull();
+  });
+
+  it("rejette started_at non-ISO", () => {
+    expect(() =>
+      CopilotStreamStartedEventSchema.parse({
+        type: "started",
+        trace_id: "t",
+        tenant: "c",
+        llm_backend: null,
+        llm_model: null,
+        started_at: "yesterday",
+      }),
+    ).toThrow();
+  });
+});
+
+describe("CopilotStreamChunkEventSchema", () => {
+  it("parse chunk ok", () => {
+    const ev = CopilotStreamChunkEventSchema.parse({
+      type: "chunk",
+      text: '{"suggestions":[',
+      tokens_so_far: 5,
+    });
+    expect(ev.type).toBe("chunk");
+    expect(ev.tokens_so_far).toBe(5);
+  });
+
+  it("rejette tokens_so_far négatif", () => {
+    expect(() =>
+      CopilotStreamChunkEventSchema.parse({
+        type: "chunk",
+        text: "x",
+        tokens_so_far: -1,
+      }),
+    ).toThrow();
+  });
+});
+
+describe("CopilotStreamSuggestionEventSchema", () => {
+  it("parse suggestion event ok", () => {
+    const ev = CopilotStreamSuggestionEventSchema.parse({
+      type: "suggestion",
+      index: 0,
+      suggestion: {
+        id: "ollama-0-renforcer",
+        kind: "rewrite",
+        title: "Renforcer le ton",
+        content: "Tu es un agent marketing focalisé conversion.",
+        confidence: 82,
+      },
+    });
+    expect(ev.index).toBe(0);
+    expect(ev.suggestion.kind).toBe("rewrite");
+  });
+
+  it("rejette index hors 0-9", () => {
+    expect(() =>
+      CopilotStreamSuggestionEventSchema.parse({
+        type: "suggestion",
+        index: 10,
+        suggestion: {
+          id: "s",
+          kind: "rewrite",
+          title: "t",
+          content: "c",
+          confidence: 50,
+        },
+      }),
+    ).toThrow();
+  });
+});
+
+describe("CopilotStreamDoneEventSchema", () => {
+  it("parse done event complet ok", () => {
+    const ev = CopilotStreamDoneEventSchema.parse({
+      type: "done",
+      suggestions: [
+        {
+          id: "s1",
+          kind: "rewrite",
+          title: "T1",
+          content: "C1",
+          confidence: 80,
+        },
+      ],
+      was_idle_forced: false,
+      was_ollama_fallback: false,
+      audit_signature: "stub:sha256:abc",
+      llm_backend: "ollama",
+      llm_model: "phi3:mini",
+      llm_latency_ms: 16800,
+      total_tokens: 142,
+      generated_at: "2026-06-12T10:00:17Z",
+    });
+    expect(ev.suggestions).toHaveLength(1);
+    expect(ev.total_tokens).toBe(142);
+    expect(ev.llm_latency_ms).toBe(16800);
+  });
+
+  it("parse done event killswitch idle (llm_backend=null)", () => {
+    const ev = CopilotStreamDoneEventSchema.parse({
+      type: "done",
+      suggestions: [],
+      was_idle_forced: true,
+      was_ollama_fallback: false,
+      audit_signature: "sig",
+      llm_backend: null,
+      llm_model: null,
+      llm_latency_ms: 0,
+      total_tokens: 0,
+      generated_at: "2026-06-12T10:00:00Z",
+    });
+    expect(ev.was_idle_forced).toBe(true);
+  });
+
+  it("rejette llm_latency_ms > 120000", () => {
+    expect(() =>
+      CopilotStreamDoneEventSchema.parse({
+        type: "done",
+        suggestions: [],
+        was_idle_forced: false,
+        was_ollama_fallback: false,
+        audit_signature: "sig",
+        llm_backend: "ollama",
+        llm_model: "m",
+        llm_latency_ms: 200_000,
+        total_tokens: 0,
+        generated_at: "2026-06-12T10:00:00Z",
+      }),
+    ).toThrow();
+  });
+});
+
+describe("CopilotStreamErrorEventSchema", () => {
+  it("parse error event killswitch ok", () => {
+    const ev = CopilotStreamErrorEventSchema.parse({
+      type: "error",
+      code: "killswitch_idle",
+      message: "engine idle forced",
+    });
+    expect(ev.code).toBe("killswitch_idle");
+  });
+
+  it("parse error event acl_forbidden ok", () => {
+    const ev = CopilotStreamErrorEventSchema.parse({
+      type: "error",
+      code: "acl_forbidden",
+      message: "actor forbidden at L1",
+    });
+    expect(ev.code).toBe("acl_forbidden");
+  });
+
+  it("rejette code inconnu", () => {
+    expect(() =>
+      CopilotStreamErrorEventSchema.parse({
+        type: "error",
+        code: "panic",
+        message: "x",
+      }),
+    ).toThrow();
+  });
+
+  it("rejette message > 500 chars", () => {
+    expect(() =>
+      CopilotStreamErrorEventSchema.parse({
+        type: "error",
+        code: "internal",
+        message: "x".repeat(501),
+      }),
+    ).toThrow();
+  });
+});
+
+describe("CopilotStreamEventSchema (union discriminée)", () => {
+  it("dispatch sur started", () => {
+    const ev = CopilotStreamEventSchema.parse({
+      type: "started",
+      trace_id: "t",
+      tenant: "c",
+      llm_backend: "ollama",
+      llm_model: "phi3:mini",
+      started_at: "2026-06-12T10:00:00Z",
+    });
+    expect(ev.type).toBe("started");
+  });
+
+  it("dispatch sur chunk", () => {
+    const ev = CopilotStreamEventSchema.parse({
+      type: "chunk",
+      text: "{",
+      tokens_so_far: 1,
+    });
+    expect(ev.type).toBe("chunk");
+  });
+
+  it("dispatch sur suggestion", () => {
+    const ev = CopilotStreamEventSchema.parse({
+      type: "suggestion",
+      index: 0,
+      suggestion: {
+        id: "s",
+        kind: "rewrite",
+        title: "t",
+        content: "c",
+        confidence: 50,
+      },
+    });
+    expect(ev.type).toBe("suggestion");
+  });
+
+  it("dispatch sur done", () => {
+    const ev = CopilotStreamEventSchema.parse({
+      type: "done",
+      suggestions: [],
+      was_idle_forced: false,
+      was_ollama_fallback: false,
+      audit_signature: "sig",
+      llm_backend: null,
+      llm_model: null,
+      llm_latency_ms: 0,
+      total_tokens: 0,
+      generated_at: "2026-06-12T10:00:00Z",
+    });
+    expect(ev.type).toBe("done");
+  });
+
+  it("dispatch sur error", () => {
+    const ev = CopilotStreamEventSchema.parse({
+      type: "error",
+      code: "llm_timeout",
+      message: "timeout 60s",
+    });
+    expect(ev.type).toBe("error");
+  });
+
+  it("rejette type inconnu", () => {
+    expect(() =>
+      CopilotStreamEventSchema.parse({ type: "garbage", foo: "bar" }),
     ).toThrow();
   });
 });

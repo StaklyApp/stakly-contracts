@@ -366,3 +366,114 @@ export const CopilotSuggestResponseSchema = z.object({
   was_ollama_fallback: z.boolean().optional(),
 });
 export type CopilotSuggestResponse = z.infer<typeof CopilotSuggestResponseSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  CopilotSuggest streaming (Sprint G.8 — SSE)                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Backend LLM (réutilisé dans les events streaming).
+ */
+export const CopilotLlmBackendSchema = z.enum(["stub", "ollama", "vllm"]);
+export type CopilotLlmBackend = z.infer<typeof CopilotLlmBackendSchema>;
+
+/**
+ * Event SSE émis au tout début du stream (avant le moindre token).
+ * Permet à l'UI d'afficher un indicateur "Iris réfléchit..." + telemetry partielle.
+ */
+export const CopilotStreamStartedEventSchema = z.object({
+  type: z.literal("started"),
+  trace_id: z.string().min(1).max(64),
+  tenant: z.string().min(1).max(64),
+  llm_backend: CopilotLlmBackendSchema.nullable(),
+  llm_model: z.string().max(80).nullable(),
+  started_at: z.string().datetime(),
+});
+export type CopilotStreamStartedEvent = z.infer<
+  typeof CopilotStreamStartedEventSchema
+>;
+
+/**
+ * Event SSE émis pour chaque chunk de texte reçu d'Ollama.
+ * `tokens_so_far` permet à l'UI d'afficher un compteur.
+ */
+export const CopilotStreamChunkEventSchema = z.object({
+  type: z.literal("chunk"),
+  /** Texte brut du chunk (token ou groupe de tokens). */
+  text: z.string().max(2_000),
+  /** Compteur cumulatif depuis le début du stream. */
+  tokens_so_far: z.number().int().min(0),
+});
+export type CopilotStreamChunkEvent = z.infer<
+  typeof CopilotStreamChunkEventSchema
+>;
+
+/**
+ * Event SSE émis quand une suggestion complète a été parsée (JSON valide).
+ * L'UI peut l'afficher progressivement.
+ */
+export const CopilotStreamSuggestionEventSchema = z.object({
+  type: z.literal("suggestion"),
+  /** Index ordinal de la suggestion (0-based). */
+  index: z.number().int().min(0).max(9),
+  suggestion: CopilotSuggestionSchema,
+});
+export type CopilotStreamSuggestionEvent = z.infer<
+  typeof CopilotStreamSuggestionEventSchema
+>;
+
+/**
+ * Event SSE final — contient le payload complet équivalent à la réponse
+ * non-streaming, + telemetry de tokens totaux.
+ */
+export const CopilotStreamDoneEventSchema = z.object({
+  type: z.literal("done"),
+  suggestions: z.array(CopilotSuggestionSchema).max(10),
+  was_idle_forced: z.boolean(),
+  was_ollama_fallback: z.boolean(),
+  audit_signature: z.string().min(1).max(256),
+  llm_backend: CopilotLlmBackendSchema.nullable(),
+  llm_model: z.string().max(80).nullable(),
+  llm_latency_ms: z.number().int().min(0).max(120_000),
+  total_tokens: z.number().int().min(0),
+  generated_at: z.string().datetime(),
+});
+export type CopilotStreamDoneEvent = z.infer<
+  typeof CopilotStreamDoneEventSchema
+>;
+
+/**
+ * Event SSE d'erreur — termine le stream. UI affiche un badge + retry.
+ */
+export const CopilotStreamErrorCodeSchema = z.enum([
+  "killswitch_idle",
+  "acl_forbidden",
+  "llm_timeout",
+  "llm_invalid_json",
+  "internal",
+]);
+export type CopilotStreamErrorCode = z.infer<
+  typeof CopilotStreamErrorCodeSchema
+>;
+
+export const CopilotStreamErrorEventSchema = z.object({
+  type: z.literal("error"),
+  code: CopilotStreamErrorCodeSchema,
+  message: z.string().max(500),
+});
+export type CopilotStreamErrorEvent = z.infer<
+  typeof CopilotStreamErrorEventSchema
+>;
+
+/**
+ * Union discriminée de tous les events SSE possibles.
+ * Le caller (UI) doit valider chaque event reçu via `safeParse`.
+ */
+export const CopilotStreamEventSchema = z.discriminatedUnion("type", [
+  CopilotStreamStartedEventSchema,
+  CopilotStreamChunkEventSchema,
+  CopilotStreamSuggestionEventSchema,
+  CopilotStreamDoneEventSchema,
+  CopilotStreamErrorEventSchema,
+]);
+export type CopilotStreamEvent = z.infer<typeof CopilotStreamEventSchema>;
