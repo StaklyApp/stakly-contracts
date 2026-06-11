@@ -12,8 +12,16 @@
  */
 
 import { z } from "zod";
-import { KillswitchStateSchema } from "../agents-instances/index.js";
-import { AclCascadeSchema, AclDecisionSchema } from "../runtime/index.js";
+import {
+  KillswitchStateSchema,
+  InstanceTenantIdSchema,
+  GroupSlotSchema,
+} from "../agents-instances/index.js";
+import {
+  AclCascadeSchema,
+  AclDecisionSchema,
+  RuntimeAclLevelSchema,
+} from "../runtime/index.js";
 
 /* ------------------------------------------------------------------ */
 /*  MTLSConfigSchema                                                   */
@@ -251,3 +259,93 @@ export function resolveAclCascade(
   }
   return { allowed: true, reason: "no rule matched (open)", blocking_level: null };
 }
+
+/* ------------------------------------------------------------------ */
+/*  CopilotSuggestRequestSchema (Sprint F.5b)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Requête de suggestion copilote pour l'édition d'instructions d'agent.
+ * Appelée depuis l'UI `AICopilotTab` via Hub tRPC `agentInstances.copilotSuggest`,
+ * relayée à AIE `POST /copilot/suggest`.
+ *
+ * Le moteur :
+ *  1. Check killswitch — si idle_forced → mock structuré (Iris en pause)
+ *  2. Check ACL cascade INTERSECTION L0→L3
+ *  3. Appel LLM stub (Ollama/vLLM en prod)
+ *  4. Audit ed25519 chain
+ *  5. Retourne {suggestions, was_idle_forced, audit_signature}
+ *
+ * @see memo `project_l0_ai_hub_killswitch_souverain_2026_06_08`
+ */
+export const CopilotSuggestRequestSchema = z.object({
+  /** Slot human-friendly du groupe (ex: GRPMGR-MARKETING). */
+  groupSlot: GroupSlotSchema,
+  /** Layer cible de la suggestion (L0/L1/L2/L3). */
+  layer: RuntimeAclLevelSchema,
+  /** Texte brouillon en cours d'édition côté UI. */
+  draftText: z.string().min(0).max(8_000),
+  /** Contexte (instructions héritées des layers supérieurs). */
+  instructionsContext: z.string().max(4_000).optional(),
+  /** Tenant ID — issu de la session OIDC, jamais du body. */
+  tenant: InstanceTenantIdSchema,
+  /** Acteur appelant (ACTR_ 44C) pour ACL. */
+  actor_id: z.string().length(44),
+  /** Cascade ACL résolue (input pour le check INTERSECTION). */
+  acl_cascade: AclCascadeSchema,
+  /** Trace ID corrélation. */
+  trace_id: z.string().min(1).max(64),
+});
+export type CopilotSuggestRequest = z.infer<typeof CopilotSuggestRequestSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  CopilotSuggestionSchema                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Une suggestion individuelle (kind discriminant + payload).
+ *  - `rewrite`       : remplacement du brouillon par une version améliorée
+ *  - `addition`      : ajout d'un paragraphe complémentaire
+ *  - `lint_warning`  : avertissement structurel (anti-pattern, drift, etc.)
+ */
+export const CopilotSuggestionKindSchema = z.enum([
+  "rewrite",
+  "addition",
+  "lint_warning",
+]);
+export type CopilotSuggestionKind = z.infer<typeof CopilotSuggestionKindSchema>;
+
+export const CopilotSuggestionSchema = z.object({
+  id: z.string().min(1).max(64),
+  kind: CopilotSuggestionKindSchema,
+  title: z.string().min(1).max(80),
+  content: z.string().min(1).max(500),
+  reasoning: z.string().max(300).optional(),
+  /** Confiance 0-100. */
+  confidence: z.number().min(0).max(100),
+});
+export type CopilotSuggestion = z.infer<typeof CopilotSuggestionSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  CopilotSuggestResponseSchema                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Réponse copilote — toujours valide même si killswitch IDLE
+ * (mock structuré renvoyé avec `was_idle_forced: true`).
+ */
+export const CopilotSuggestResponseSchema = z.object({
+  /** 0 à 10 suggestions. Si killswitch IDLE → mock canned (3 typiques). */
+  suggestions: z.array(CopilotSuggestionSchema).max(10),
+  /** True si killswitch en mode idle_forced (mock servi). */
+  was_idle_forced: z.boolean(),
+  /** Signature ed25519 chaînée — audit append-only. */
+  audit_signature: z.string().min(1).max(256),
+  /** Timestamp ISO de génération. */
+  generated_at: z.string().datetime(),
+  /** Trace ID corrélation. */
+  trace_id: z.string().min(1).max(64),
+  /** Décision ACL résolue (UI peut afficher banner forbidden). */
+  acl_decision: AclDecisionSchema,
+});
+export type CopilotSuggestResponse = z.infer<typeof CopilotSuggestResponseSchema>;
