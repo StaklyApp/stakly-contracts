@@ -478,4 +478,73 @@ describe("CopilotSuggestResponseSchema", () => {
     expect(res.acl_decision.allowed).toBe(false);
     expect(res.suggestions).toHaveLength(0);
   });
+
+  // Sprint G.7 — telemetry LLM optional fields
+  it("parse response avec llm telemetry Ollama (Sprint G.7)", () => {
+    const res = CopilotSuggestResponseSchema.parse({
+      suggestions: [
+        { id: "s1", kind: "rewrite", title: "T1", content: "C1", confidence: 85 },
+      ],
+      was_idle_forced: false,
+      audit_signature: "sig",
+      generated_at: "2026-06-11T10:00:00Z",
+      trace_id: "t-ollama",
+      acl_decision: { allowed: true, reason: "ok", blocking_level: null },
+      llm_backend: "ollama",
+      llm_model: "phi3:mini",
+      llm_latency_ms: 2840,
+      was_ollama_fallback: false,
+    });
+    expect(res.llm_backend).toBe("ollama");
+    expect(res.llm_model).toBe("phi3:mini");
+    expect(res.llm_latency_ms).toBe(2840);
+    expect(res.was_ollama_fallback).toBe(false);
+  });
+
+  it("parse response fallback (Ollama timeout → stub)", () => {
+    const res = CopilotSuggestResponseSchema.parse({
+      suggestions: [
+        { id: "s1", kind: "lint_warning", title: "Cascade complète", content: "OK", confidence: 60 },
+      ],
+      was_idle_forced: false,
+      audit_signature: "sig",
+      generated_at: "2026-06-11T10:00:00Z",
+      trace_id: "t-fb",
+      acl_decision: { allowed: true, reason: "ok", blocking_level: null },
+      llm_backend: "stub",
+      llm_model: null,
+      llm_latency_ms: null,
+      was_ollama_fallback: true,
+    });
+    expect(res.llm_backend).toBe("stub");
+    expect(res.was_ollama_fallback).toBe(true);
+  });
+
+  it("parse response sans champs LLM (rétrocompatible)", () => {
+    const res = CopilotSuggestResponseSchema.parse({
+      suggestions: [],
+      was_idle_forced: false,
+      audit_signature: "sig",
+      generated_at: "2026-06-11T10:00:00Z",
+      trace_id: "t-legacy",
+      acl_decision: { allowed: true, reason: "ok", blocking_level: null },
+    });
+    expect(res.llm_backend).toBeUndefined();
+    expect(res.llm_model).toBeUndefined();
+    expect(res.llm_latency_ms).toBeUndefined();
+  });
+
+  it("rejette llm_latency_ms négatif", () => {
+    expect(() =>
+      CopilotSuggestResponseSchema.parse({
+        suggestions: [],
+        was_idle_forced: false,
+        audit_signature: "sig",
+        generated_at: "2026-06-11T10:00:00Z",
+        trace_id: "t",
+        acl_decision: { allowed: true, reason: "ok", blocking_level: null },
+        llm_latency_ms: -1,
+      }),
+    ).toThrow();
+  });
 });

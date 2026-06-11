@@ -347,5 +347,22 @@ export const CopilotSuggestResponseSchema = z.object({
   trace_id: z.string().min(1).max(64),
   /** Décision ACL résolue (UI peut afficher banner forbidden). */
   acl_decision: AclDecisionSchema,
+  /**
+   * Backend LLM réellement utilisé (Sprint G.7).
+   *  - `"stub"`     : heuristique locale (Sprint F.5b)
+   *  - `"ollama"`   : phi3:mini / llama3.2 / etc. local container
+   *  - `"vllm"`     : déploiement vLLM futur
+   *  - `null`       : pas de LLM call (killswitch idle ou ACL forbidden)
+   */
+  llm_backend: z.enum(["stub", "ollama", "vllm"]).nullable().optional(),
+  /** Nom du modèle utilisé (ex: `phi3:mini`). null si pas de LLM call. */
+  llm_model: z.string().max(80).nullable().optional(),
+  /** Latence inférence LLM en ms (Sprint G.7). null si pas de LLM call. */
+  llm_latency_ms: z.number().int().min(0).max(120_000).nullable().optional(),
+  /**
+   * True si Ollama a échoué (timeout/JSON invalide/5xx) et le stub heuristique
+   * a été servi en fallback. Si true, `llm_backend === "stub"`.
+   */
+  was_ollama_fallback: z.boolean().optional(),
 });
 export type CopilotSuggestResponse = z.infer<typeof CopilotSuggestResponseSchema>;
