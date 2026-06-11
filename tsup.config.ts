@@ -19,6 +19,7 @@ export default defineConfig({
     "tools/index": "src/tools/index.ts",
     "agents/index": "src/agents/index.ts",
     "runtime/index": "src/runtime/index.ts",
+    "documents/index": "src/documents/index.ts",
     "errors/index": "src/errors/index.ts",
   },
   format: ["esm", "cjs"],

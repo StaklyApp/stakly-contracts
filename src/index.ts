@@ -12,9 +12,10 @@
  *  - `/tools`          — 5 outils Z3 (Toolbar)
  *  - `/agents`         — AgentSnapshot / AgentDelta CQRS
  *  - `/runtime`        — MSG/INS/EVT/RSP + ROOM Matrix + ACL cascade
+ *  - `/documents`      — Pack Base documentaire (PCKDOC) — entities + MCP tools + DLP
  *  - `/errors`         — StaklyError discriminée
  *
- * @version 0.1.0
+ * @version 0.2.0
  * @see {@link https://github.com/StaklyApp/stakly-contracts}
  */
 
@@ -24,9 +25,10 @@ export * from "./apps/index.js";
 export * from "./tools/index.js";
 export * from "./agents/index.js";
 export * from "./runtime/index.js";
+export * from "./documents/index.js";
 export * from "./errors/index.js";
 
 /**
  * Version courante du package. Incrémenté à chaque release SemVer.
  */
-export const CONTRACTS_VERSION = "0.1.0" as const;
+export const CONTRACTS_VERSION = "0.2.0" as const;

@@ -1,6 +1,6 @@
 {
   "name": "@staklyapp/contracts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Stakly v3 lingua franca — Zod schemas + TypeScript types (44C, Display Engine, Apps, Tools, Agents CQRS, Runtime, Errors). Source unique de vérité partagée entre stakly-hub (BFF) et stakly-ui (SPA).",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -75,6 +75,16 @@
       "require": {
         "types": "./dist/runtime/index.d.cts",
         "default": "./dist/runtime/index.cjs"
+      }
+    },
+    "./documents": {
+      "import": {
+        "types": "./dist/documents/index.d.ts",
+        "default": "./dist/documents/index.js"
+      },
+      "require": {
+        "types": "./dist/documents/index.d.cts",
+        "default": "./dist/documents/index.cjs"
       }
     },
     "./errors": {
