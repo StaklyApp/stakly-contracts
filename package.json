@@ -1,7 +1,7 @@
 {
   "name": "@staklyapp/contracts",
-  "version": "0.2.0",
-  "description": "Stakly v3 lingua franca — Zod schemas + TypeScript types (44C, Display Engine, Apps, Tools, Agents CQRS, Runtime, Errors). Source unique de vérité partagée entre stakly-hub (BFF) et stakly-ui (SPA).",
+  "version": "0.3.0",
+  "description": "Stakly v3 lingua franca — Zod schemas + TypeScript types (44C, Display Engine, Apps, Tools, Agents CQRS, Runtime, Documents, Agents-Instances, AIE, Errors). Source unique de vérité partagée entre stakly-hub (BFF), stakly-ui (SPA) et stakly-v3-aie (engine).",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -85,6 +85,26 @@
       "require": {
         "types": "./dist/documents/index.d.cts",
         "default": "./dist/documents/index.cjs"
+      }
+    },
+    "./agents-instances": {
+      "import": {
+        "types": "./dist/agents-instances/index.d.ts",
+        "default": "./dist/agents-instances/index.js"
+      },
+      "require": {
+        "types": "./dist/agents-instances/index.d.cts",
+        "default": "./dist/agents-instances/index.cjs"
+      }
+    },
+    "./aie": {
+      "import": {
+        "types": "./dist/aie/index.d.ts",
+        "default": "./dist/aie/index.js"
+      },
+      "require": {
+        "types": "./dist/aie/index.d.cts",
+        "default": "./dist/aie/index.cjs"
       }
     },
     "./errors": {

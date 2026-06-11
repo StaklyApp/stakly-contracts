@@ -13,9 +13,11 @@
  *  - `/agents`         — AgentSnapshot / AgentDelta CQRS
  *  - `/runtime`        — MSG/INS/EVT/RSP + ROOM Matrix + ACL cascade
  *  - `/documents`      — Pack Base documentaire (PCKDOC) — entities + MCP tools + DLP
+ *  - `/agents-instances` — Pack PCKAIE (Instance, Scope, Room, Instruction cascade L0-L3)
+ *  - `/aie`            — Container stakly-v3-aie : mTLS, Killswitch, Inference, ACL intersection
  *  - `/errors`         — StaklyError discriminée
  *
- * @version 0.2.0
+ * @version 0.3.0
  * @see {@link https://github.com/StaklyApp/stakly-contracts}
  */
 
@@ -26,9 +28,11 @@ export * from "./tools/index.js";
 export * from "./agents/index.js";
 export * from "./runtime/index.js";
 export * from "./documents/index.js";
+export * from "./agents-instances/index.js";
+export * from "./aie/index.js";
 export * from "./errors/index.js";
 
 /**
  * Version courante du package. Incrémenté à chaque release SemVer.
  */
-export const CONTRACTS_VERSION = "0.2.0" as const;
+export const CONTRACTS_VERSION = "0.3.0" as const;
