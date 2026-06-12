@@ -1,6 +1,6 @@
 {
   "name": "@staklyapp/contracts",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Stakly v3 lingua franca — Zod schemas + TypeScript types (44C, Display Engine, Apps, Tools, Agents CQRS, Runtime, Documents, Agents-Instances, AIE, Errors). Source unique de vérité partagée entre stakly-hub (BFF), stakly-ui (SPA) et stakly-v3-aie (engine).",
   "type": "module",
   "main": "./dist/index.cjs",

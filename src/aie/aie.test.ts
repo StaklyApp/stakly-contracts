@@ -20,6 +20,13 @@ import {
   CopilotStreamDoneEventSchema,
   CopilotStreamErrorEventSchema,
   CopilotStreamEventSchema,
+  AiHubKillswitchStateSchema,
+  AiHubKillswitchTenantStateSchema,
+  AiHubKillswitchAuditHeadSchema,
+  AiHubKillswitchListResponseSchema,
+  AiHubKillswitchSetRequestSchema,
+  AiHubKillswitchClearRequestSchema,
+  AiHubKillswitchMutationResponseSchema,
 } from "./index.js";
 import type { AclCascade } from "../runtime/index.js";
 
@@ -821,6 +828,225 @@ describe("CopilotStreamEventSchema (union discriminée)", () => {
   it("rejette type inconnu", () => {
     expect(() =>
       CopilotStreamEventSchema.parse({ type: "garbage", foo: "bar" }),
+    ).toThrow();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  AI-HUB Admin Killswitch (Sprint G.9)                               */
+/* ------------------------------------------------------------------ */
+
+describe("AiHubKillswitchStateSchema", () => {
+  it("accepte les 3 états valides", () => {
+    expect(AiHubKillswitchStateSchema.parse("active")).toBe("active");
+    expect(AiHubKillswitchStateSchema.parse("idle_forced")).toBe("idle_forced");
+    expect(AiHubKillswitchStateSchema.parse("degraded")).toBe("degraded");
+  });
+
+  it("rejette les états inconnus (anti-typo)", () => {
+    expect(() => AiHubKillswitchStateSchema.parse("idle")).toThrow();
+    expect(() => AiHubKillswitchStateSchema.parse("ACTIVE")).toThrow();
+    expect(() => AiHubKillswitchStateSchema.parse("")).toThrow();
+  });
+});
+
+describe("AiHubKillswitchTenantStateSchema", () => {
+  const valid = {
+    tenant_id: "000003",
+    state: "idle_forced" as const,
+    reason: "Test G.9 bascule",
+    updated_at: "2026-06-12T10:30:00.000Z",
+    updated_by: "holys.org@gmail.com",
+    expires_at: null,
+  };
+
+  it("parse une entrée valide", () => {
+    expect(() => AiHubKillswitchTenantStateSchema.parse(valid)).not.toThrow();
+  });
+
+  it("accepte reason=null + updated_by=null pour défaut", () => {
+    const parsed = AiHubKillswitchTenantStateSchema.parse({
+      ...valid,
+      state: "active",
+      reason: null,
+      updated_by: null,
+    });
+    expect(parsed.reason).toBeNull();
+    expect(parsed.updated_by).toBeNull();
+  });
+
+  it("rejette un tenant_id vide", () => {
+    expect(() =>
+      AiHubKillswitchTenantStateSchema.parse({ ...valid, tenant_id: "" }),
+    ).toThrow();
+  });
+
+  it("rejette un updated_at non ISO-8601", () => {
+    expect(() =>
+      AiHubKillswitchTenantStateSchema.parse({
+        ...valid,
+        updated_at: "yesterday",
+      }),
+    ).toThrow();
+  });
+});
+
+describe("AiHubKillswitchAuditHeadSchema", () => {
+  it("accepte un head plein (chain non vide)", () => {
+    expect(() =>
+      AiHubKillswitchAuditHeadSchema.parse({
+        last_entry_at: "2026-06-12T10:30:00.000Z",
+        total_entries: 42,
+        hash: "a".repeat(64),
+      }),
+    ).not.toThrow();
+  });
+
+  it("accepte un head vide (chain neuve)", () => {
+    expect(() =>
+      AiHubKillswitchAuditHeadSchema.parse({
+        last_entry_at: null,
+        total_entries: 0,
+        hash: null,
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejette un hash non SHA-256 (longueur erronée)", () => {
+    expect(() =>
+      AiHubKillswitchAuditHeadSchema.parse({
+        last_entry_at: null,
+        total_entries: 0,
+        hash: "tooshort",
+      }),
+    ).toThrow();
+  });
+});
+
+describe("AiHubKillswitchListResponseSchema", () => {
+  it("parse une réponse complète (3 tenants + audit head)", () => {
+    const parsed = AiHubKillswitchListResponseSchema.parse({
+      tenants: [
+        {
+          tenant_id: "000003",
+          state: "active",
+          reason: null,
+          updated_at: "2026-06-12T10:00:00.000Z",
+          updated_by: null,
+          expires_at: null,
+        },
+        {
+          tenant_id: "000010",
+          state: "idle_forced",
+          reason: "impaye Stripe",
+          updated_at: "2026-06-11T22:00:00.000Z",
+          updated_by: "rodrigue@stakly",
+          expires_at: "2026-06-15T22:00:00.000Z",
+        },
+        {
+          tenant_id: "000020",
+          state: "degraded",
+          reason: "AI-HUB poll partiel",
+          updated_at: "2026-06-12T10:25:00.000Z",
+          updated_by: null,
+          expires_at: null,
+        },
+      ],
+      audit_head: {
+        last_entry_at: "2026-06-12T10:25:00.000Z",
+        total_entries: 17,
+        hash: "f".repeat(64),
+      },
+    });
+    expect(parsed.tenants).toHaveLength(3);
+    expect(parsed.audit_head?.total_entries).toBe(17);
+  });
+
+  it("accepte tenants vide + audit_head null", () => {
+    const parsed = AiHubKillswitchListResponseSchema.parse({
+      tenants: [],
+      audit_head: null,
+    });
+    expect(parsed.tenants).toEqual([]);
+    expect(parsed.audit_head).toBeNull();
+  });
+});
+
+describe("AiHubKillswitchSetRequestSchema", () => {
+  it("parse une requête valide", () => {
+    expect(() =>
+      AiHubKillswitchSetRequestSchema.parse({
+        tenant_id: "000003",
+        state: "idle_forced",
+        reason: "Test smoke G.9",
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejette une reason trop courte (<3 chars — anti audit vide)", () => {
+    expect(() =>
+      AiHubKillswitchSetRequestSchema.parse({
+        tenant_id: "000003",
+        state: "idle_forced",
+        reason: "x",
+      }),
+    ).toThrow();
+  });
+
+  it("rejette une reason trop longue (>500 chars — surface DoS)", () => {
+    expect(() =>
+      AiHubKillswitchSetRequestSchema.parse({
+        tenant_id: "000003",
+        state: "active",
+        reason: "z".repeat(501),
+      }),
+    ).toThrow();
+  });
+
+  it("accepte expires_at ISO ou absent", () => {
+    expect(() =>
+      AiHubKillswitchSetRequestSchema.parse({
+        tenant_id: "000003",
+        state: "idle_forced",
+        reason: "maintenance fenêtre 4h",
+        expires_at: "2026-06-15T00:00:00.000Z",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      AiHubKillswitchSetRequestSchema.parse({
+        tenant_id: "000003",
+        state: "idle_forced",
+        reason: "maintenance fenêtre 4h",
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe("AiHubKillswitchClearRequestSchema + MutationResponseSchema", () => {
+  it("parse une requête clear minimale", () => {
+    const parsed = AiHubKillswitchClearRequestSchema.parse({
+      tenant_id: "000003",
+    });
+    expect(parsed.tenant_id).toBe("000003");
+  });
+
+  it("parse une réponse de mutation (success literal true)", () => {
+    expect(() =>
+      AiHubKillswitchMutationResponseSchema.parse({
+        success: true,
+        state: "active",
+        tenant_id: "000003",
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejette success=false (literal strict)", () => {
+    expect(() =>
+      AiHubKillswitchMutationResponseSchema.parse({
+        success: false,
+        state: "active",
+        tenant_id: "000003",
+      }),
     ).toThrow();
   });
 });

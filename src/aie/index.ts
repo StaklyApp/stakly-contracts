@@ -477,3 +477,114 @@ export const CopilotStreamEventSchema = z.discriminatedUnion("type", [
   CopilotStreamErrorEventSchema,
 ]);
 export type CopilotStreamEvent = z.infer<typeof CopilotStreamEventSchema>;
+
+/* ------------------------------------------------------------------ */
+/*  AI-HUB Admin Killswitch (Sprint G.9)                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * État runtime du killswitch tel que vu par AI-HUB central.
+ *
+ *  - `active`      : poll OK, engine tourne normalement
+ *  - `idle_forced` : Stakly a forcé l'engine en pause (TTL 30s revalidé)
+ *  - `degraded`    : poll partiel, engine fonctionne en mode dégradé
+ *
+ * Distinct du `KillswitchToggleInput.active` (boolean) côté Hub→OPA :
+ * ici on lit l'état RÉEL côté AI-HUB qui fait foi pour les engines.
+ *
+ * Cf. mémoire `project_l0_ai_hub_killswitch_souverain_2026_06_08`.
+ */
+export const AiHubKillswitchStateSchema = z.enum([
+  "active",
+  "idle_forced",
+  "degraded",
+]);
+export type AiHubKillswitchState = z.infer<typeof AiHubKillswitchStateSchema>;
+
+/**
+ * État d'un tenant côté AI-HUB. Surface NORMALISÉE : aucun champ interne
+ * (clé Vault, jeton mTLS, signature ed25519...) n'est exposé.
+ */
+export const AiHubKillswitchTenantStateSchema = z.object({
+  /** Slug du tenant (ex: `000003`, `000010`). */
+  tenant_id: z.string().min(1).max(64),
+  /** État courant (cf. `AiHubKillswitchStateSchema`). */
+  state: AiHubKillswitchStateSchema,
+  /** Raison libre — `null` si aucun toggle explicite (mode default). */
+  reason: z.string().max(500).nullable(),
+  /** Timestamp ISO-8601 de la dernière mise à jour (UTC ou offset). */
+  updated_at: z.string().datetime({ offset: true }),
+  /** Acteur qui a posé/changé l'état (email ou actor_id). `null` si default. */
+  updated_by: z.string().max(128).nullable(),
+  /** Timestamp ISO-8601 d'expiration auto-revoke. `null` si pas d'expiration. */
+  expires_at: z.string().datetime().nullable(),
+});
+export type AiHubKillswitchTenantState = z.infer<
+  typeof AiHubKillswitchTenantStateSchema
+>;
+
+/**
+ * Tête (head) du log audit AI-HUB. Métadonnées de la chaîne ed25519
+ * append-only — la chaîne complète n'est PAS exposée à l'UI (sécurité +
+ * volume), seule la head sert à monitorer la freshness.
+ */
+export const AiHubKillswitchAuditHeadSchema = z.object({
+  /** Timestamp ISO-8601 de la dernière entrée du chain. `null` si vide. */
+  last_entry_at: z.string().datetime({ offset: true }).nullable(),
+  /** Nombre total d'entrées dans le chain (>= 0). */
+  total_entries: z.number().int().min(0),
+  /** Hash SHA-256 hexa de la dernière entrée. `null` si chain vide. */
+  hash: z.string().regex(/^[A-Fa-f0-9]{64}$/, "SHA-256 hex 64 chars requis").nullable(),
+});
+export type AiHubKillswitchAuditHead = z.infer<
+  typeof AiHubKillswitchAuditHeadSchema
+>;
+
+/**
+ * Réponse de `admin.aiHubKillswitch.list` — tous les tenants + head audit.
+ */
+export const AiHubKillswitchListResponseSchema = z.object({
+  tenants: z.array(AiHubKillswitchTenantStateSchema),
+  audit_head: AiHubKillswitchAuditHeadSchema.nullable(),
+});
+export type AiHubKillswitchListResponse = z.infer<
+  typeof AiHubKillswitchListResponseSchema
+>;
+
+/**
+ * Entrée du `admin.aiHubKillswitch.set` — force la bascule.
+ *
+ * `reason` est OBLIGATOIRE pour traçabilité audit RGPD / EU AI Act, même
+ * pour un retour à `active` via cette route (à distinguer de `clear`).
+ */
+export const AiHubKillswitchSetRequestSchema = z.object({
+  tenant_id: z.string().min(1).max(64),
+  state: AiHubKillswitchStateSchema,
+  reason: z.string().min(3).max(500),
+  expires_at: z.string().datetime({ offset: true }).nullable().optional(),
+});
+export type AiHubKillswitchSetRequest = z.infer<
+  typeof AiHubKillswitchSetRequestSchema
+>;
+
+/**
+ * Entrée du `admin.aiHubKillswitch.clear` — reset à `active`.
+ */
+export const AiHubKillswitchClearRequestSchema = z.object({
+  tenant_id: z.string().min(1).max(64),
+});
+export type AiHubKillswitchClearRequest = z.infer<
+  typeof AiHubKillswitchClearRequestSchema
+>;
+
+/**
+ * Réponse de `set` / `clear` — succès + état résultant.
+ */
+export const AiHubKillswitchMutationResponseSchema = z.object({
+  success: z.literal(true),
+  state: AiHubKillswitchStateSchema,
+  tenant_id: z.string().min(1).max(64),
+});
+export type AiHubKillswitchMutationResponse = z.infer<
+  typeof AiHubKillswitchMutationResponseSchema
+>;
