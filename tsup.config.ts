@@ -22,6 +22,7 @@ export default defineConfig({
     "documents/index": "src/documents/index.ts",
     "agents-instances/index": "src/agents-instances/index.ts",
     "aie/index": "src/aie/index.ts",
+    "marketplace/index": "src/marketplace/index.ts",
     "errors/index": "src/errors/index.ts",
   },
   format: ["esm", "cjs"],
