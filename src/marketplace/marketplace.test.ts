@@ -93,6 +93,11 @@ describe("PackPricingSchema", () => {
     expect(PackPricingSchema.parse({ tier: "free" }).tier).toBe("free");
   });
 
+  it("accepts pricing with monthly_eur: null (Python serializes None as null)", () => {
+    const p = PackPricingSchema.parse({ tier: "free", monthly_eur: null });
+    expect(p.monthly_eur).toBeNull();
+  });
+
   it("accepts pricing with monthly_eur", () => {
     expect(
       PackPricingSchema.parse({ tier: "pro", monthly_eur: 29 }).monthly_eur,

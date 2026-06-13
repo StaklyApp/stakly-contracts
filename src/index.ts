@@ -18,7 +18,7 @@
  *  - `/marketplace`    — Federation v2 (PackManifest + FederatedPacks list/fetch)
  *  - `/errors`         — StaklyError discriminée
  *
- * @version 0.4.0
+ * @version 0.4.1
  * @see {@link https://github.com/StaklyApp/stakly-contracts}
  */
 
@@ -37,4 +37,4 @@ export * from "./errors/index.js";
 /**
  * Version courante du package. Incrémenté à chaque release SemVer.
  */
-export const CONTRACTS_VERSION = "0.4.0" as const;
+export const CONTRACTS_VERSION = "0.4.1" as const;

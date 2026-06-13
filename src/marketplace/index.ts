@@ -113,7 +113,11 @@ export type PackPublisher = z.infer<typeof PackPublisherSchema>;
 
 export const PackPricingSchema = z.object({
   tier: PackPricingTierSchema,
-  monthly_eur: z.number().min(0).max(99999).optional(),
+  /**
+   * Prix mensuel en EUR. `null` autorisé (free tier explicit null Python),
+   * `undefined` autorisé (champ omis).
+   */
+  monthly_eur: z.number().min(0).max(99999).nullable().optional(),
 });
 
 export type PackPricing = z.infer<typeof PackPricingSchema>;
